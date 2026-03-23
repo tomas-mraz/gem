@@ -1,0 +1,279 @@
+package gem
+
+import (
+	_ "embed"
+	"math"
+	"runtime"
+	"time"
+	"unsafe"
+
+	"github.com/go-gl/glfw/v3.3/glfw"
+	vk "github.com/tomas-mraz/vulkan"
+	ash "github.com/tomas-mraz/vulkan-ash"
+)
+
+//go:embed shaders/default.vert.spv
+var defaultVertShader []byte
+
+//go:embed shaders/default.frag.spv
+var defaultFragShader []byte
+
+type Config struct {
+	Title  string
+	Width  int
+	Height int
+}
+
+type pushConstants struct {
+	OffsetX, OffsetY   float32
+	Angle, Aspect      float32
+	ColorR, ColorG, ColorB float32
+	Brightness         float32
+}
+
+var pushConstSize = uint32(unsafe.Sizeof(pushConstants{}))
+
+type Engine struct {
+	Config    Config
+	Window    *glfw.Window
+
+	vo        ash.Vulkan
+	swapchain ash.VulkanSwapchainInfo
+	renderer  ash.VulkanRenderInfo
+	buffer    ash.VulkanBufferInfo
+	gfx       ash.VulkanGfxPipelineInfo
+	fence     vk.Fence
+	semaphore vk.Semaphore
+
+	elapsed  float64
+	dt       float64
+	lastTime time.Time
+
+	cmd     vk.CommandBuffer
+	frameIdx uint32
+	inFrame  bool
+}
+
+func New(cfg Config) *Engine {
+	if cfg.Width == 0 {
+		cfg.Width = 800
+	}
+	if cfg.Height == 0 {
+		cfg.Height = 600
+	}
+	if cfg.Title == "" {
+		cfg.Title = "gem"
+	}
+
+	runtime.LockOSThread()
+
+	if err := glfw.Init(); err != nil {
+		panic(err)
+	}
+
+	vk.SetGetInstanceProcAddr(glfw.GetVulkanGetInstanceProcAddress())
+	if err := vk.Init(); err != nil {
+		panic(err)
+	}
+
+	glfw.WindowHint(glfw.ClientAPI, glfw.NoAPI)
+	glfw.WindowHint(glfw.Resizable, glfw.False)
+	window, err := glfw.CreateWindow(cfg.Width, cfg.Height, cfg.Title, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	extensions := window.GetRequiredInstanceExtensions()
+	vo, err := ash.NewDevice(cfg.Title, extensions, func(inst vk.Instance, _ uintptr) (vk.Surface, error) {
+		ptr, e := window.CreateWindowSurface(inst, nil)
+		if e != nil {
+			return vk.NullSurface, e
+		}
+		return vk.SurfaceFromPointer(ptr), nil
+	}, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	windowSize := ash.NewExtentSize(cfg.Width, cfg.Height)
+	swapchain, err := ash.NewSwapchain(vo.Device, vo.GpuDevice, vo.Surface, windowSize)
+	if err != nil {
+		panic(err)
+	}
+
+	renderer, err := ash.NewRenderer(vo.Device, swapchain.DisplayFormat)
+	if err != nil {
+		panic(err)
+	}
+	if err := swapchain.CreateFramebuffers(renderer.RenderPass, vk.NullImageView); err != nil {
+		panic(err)
+	}
+	if err := renderer.CreateCommandBuffers(swapchain.DefaultSwapchainLen()); err != nil {
+		panic(err)
+	}
+
+	sz := float32(0.1)
+	vertices := []float32{
+		0, -sz, 0,
+		sz * float32(math.Sin(2*math.Pi/3)), -sz * float32(math.Cos(2*math.Pi/3)), 0,
+		sz * float32(math.Sin(4*math.Pi/3)), -sz * float32(math.Cos(4*math.Pi/3)), 0,
+	}
+	buffer, err := ash.NewBufferWithData(vo.Device, vo.GpuDevice, vertices)
+	if err != nil {
+		panic(err)
+	}
+
+	gfx, err := ash.NewGraphicsPipelineWithOptions(vo.Device, swapchain.DisplaySize, renderer.RenderPass, ash.PipelineOptions{
+		VertShaderData: defaultVertShader,
+		FragShaderData: defaultFragShader,
+		PushConstantRanges: []vk.PushConstantRange{{
+			StageFlags: vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit),
+			Offset:     0,
+			Size:       pushConstSize,
+		}},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fence, semaphore, err := ash.NewSyncObjects(vo.Device)
+	if err != nil {
+		panic(err)
+	}
+
+	return &Engine{
+		Config:    cfg,
+		Window:    window,
+		vo:        vo,
+		swapchain: swapchain,
+		renderer:  renderer,
+		buffer:    buffer,
+		gfx:       gfx,
+		fence:     fence,
+		semaphore: semaphore,
+		lastTime:  time.Now(),
+	}
+}
+
+// Run starts the game loop. The provided function is called every frame.
+func (e *Engine) Run(frame func(e *Engine)) {
+	for !e.Window.ShouldClose() {
+		glfw.PollEvents()
+
+		now := time.Now()
+		e.dt = now.Sub(e.lastTime).Seconds()
+		e.elapsed += e.dt
+		e.lastTime = now
+
+		if !e.beginFrame() {
+			continue
+		}
+		frame(e)
+		e.endFrame()
+	}
+}
+
+func (e *Engine) beginFrame() bool {
+	var nextIdx uint32
+	ret := vk.AcquireNextImage(e.vo.Device, e.swapchain.DefaultSwapchain(), vk.MaxUint64, e.semaphore, vk.NullFence, &nextIdx)
+	if ret != vk.Success && ret != vk.Suboptimal {
+		return false
+	}
+	e.frameIdx = nextIdx
+	e.cmd = e.renderer.GetCmdBuffers()[nextIdx]
+
+	vk.ResetCommandBuffer(e.cmd, 0)
+	vk.BeginCommandBuffer(e.cmd, &vk.CommandBufferBeginInfo{SType: vk.StructureTypeCommandBufferBeginInfo})
+
+	clearValues := []vk.ClearValue{vk.NewClearValue([]float32{0.05, 0.05, 0.05, 1})}
+	vk.CmdBeginRenderPass(e.cmd, &vk.RenderPassBeginInfo{
+		SType:           vk.StructureTypeRenderPassBeginInfo,
+		RenderPass:      e.renderer.RenderPass,
+		Framebuffer:     e.swapchain.Framebuffers[nextIdx],
+		RenderArea:      vk.Rect2D{Extent: e.swapchain.DisplaySize},
+		ClearValueCount: 1,
+		PClearValues:    clearValues,
+	}, vk.SubpassContentsInline)
+
+	vk.CmdBindPipeline(e.cmd, vk.PipelineBindPointGraphics, e.gfx.GetPipeline())
+	vk.CmdBindVertexBuffers(e.cmd, 0, 1, []vk.Buffer{e.buffer.DefaultVertexBuffer()}, []vk.DeviceSize{0})
+
+	e.inFrame = true
+	return true
+}
+
+func (e *Engine) endFrame() {
+	if !e.inFrame {
+		return
+	}
+	e.inFrame = false
+
+	vk.CmdEndRenderPass(e.cmd)
+	vk.EndCommandBuffer(e.cmd)
+
+	vk.ResetFences(e.vo.Device, 1, []vk.Fence{e.fence})
+	vk.QueueSubmit(e.vo.Queue, 1, []vk.SubmitInfo{{
+		SType:              vk.StructureTypeSubmitInfo,
+		WaitSemaphoreCount: 1,
+		PWaitSemaphores:    []vk.Semaphore{e.semaphore},
+		PWaitDstStageMask:  []vk.PipelineStageFlags{vk.PipelineStageFlags(vk.PipelineStageColorAttachmentOutputBit)},
+		CommandBufferCount: 1,
+		PCommandBuffers:    e.renderer.GetCmdBuffers()[e.frameIdx:],
+	}}, e.fence)
+	vk.WaitForFences(e.vo.Device, 1, []vk.Fence{e.fence}, vk.True, 10_000_000_000)
+
+	vk.QueuePresent(e.vo.Queue, &vk.PresentInfo{
+		SType:          vk.StructureTypePresentInfo,
+		SwapchainCount: 1,
+		PSwapchains:    e.swapchain.Swapchains,
+		PImageIndices:  []uint32{e.frameIdx},
+	})
+}
+
+// DrawTriangle draws a colored triangle at position (x, y) with rotation angle (radians).
+func (e *Engine) DrawTriangle(x, y, angle, r, g, b float32) {
+	if !e.inFrame {
+		return
+	}
+	pc := pushConstants{
+		OffsetX:    x,
+		OffsetY:    y,
+		Angle:      angle,
+		Aspect:     float32(e.Config.Height) / float32(e.Config.Width),
+		ColorR:     r,
+		ColorG:     g,
+		ColorB:     b,
+		Brightness: 1.0,
+	}
+	flags := vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit)
+	vk.CmdPushConstants(e.cmd, e.gfx.GetLayout(), flags, 0, pushConstSize, unsafe.Pointer(&pc))
+	vk.CmdDraw(e.cmd, 3, 1, 0, 0)
+}
+
+// Elapsed returns total time since the engine started, in seconds.
+func (e *Engine) Elapsed() float64 { return e.elapsed }
+
+// DeltaTime returns duration of the last frame, in seconds.
+func (e *Engine) DeltaTime() float64 { return e.dt }
+
+// Destroy releases all Vulkan and window resources.
+func (e *Engine) Destroy() {
+	vk.DeviceWaitIdle(e.vo.Device)
+	vk.DestroySemaphore(e.vo.Device, e.semaphore, nil)
+	vk.DestroyFence(e.vo.Device, e.fence, nil)
+	e.gfx.Destroy()
+	vk.FreeMemory(e.vo.Device, e.buffer.GetDeviceMemory(), nil)
+	e.buffer.Destroy()
+	vk.FreeCommandBuffers(e.vo.Device, e.renderer.GetCmdPool(), uint32(len(e.renderer.GetCmdBuffers())), e.renderer.GetCmdBuffers())
+	vk.DestroyCommandPool(e.vo.Device, e.renderer.GetCmdPool(), nil)
+	vk.DestroyRenderPass(e.vo.Device, e.renderer.RenderPass, nil)
+	e.swapchain.Destroy()
+	vk.DestroyDevice(e.vo.Device, nil)
+	if e.vo.GetDebugCallback() != vk.NullDebugReportCallback {
+		vk.DestroyDebugReportCallback(e.vo.Instance, e.vo.GetDebugCallback(), nil)
+	}
+	vk.DestroySurface(e.vo.Instance, e.vo.Surface, nil)
+	vk.DestroyInstance(e.vo.Instance, nil)
+	e.Window.Destroy()
+	glfw.Terminate()
+}
