@@ -2,7 +2,31 @@
 
 Go game engine built on Vulkan via [vulkan-ash](https://github.com/tomas-mraz/vulkan-ash).
 
-## Project structure
+## Architecture
+
+Typy objektů:
+- scene
+- nodes
+- pods
+- events
+
+Precess game loop
+- process "action" on each "node"
+- process inputs 
+- process events
+
+Engine umožňuje vytvořit objekt "scene" který určuje způsob vykreslovací pipeline [rasterization / raytracing].
+Pod objekt scene jde přiřadit "objects": 3D primitiva (krychle, koule, jehlan, ...), model, světlo, aktivitu ...
+
+Příklad:
+ - scene (rasterization)
+   - primitive (triangle)
+     - attributes: position, dimensions, color
+     - aktivita (function describing behavior in the time of the game loop)
+     - events 
+
+
+## Structure
 
 ```
 gem/
