@@ -8,6 +8,8 @@ import (
 	"unsafe"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/tomas-mraz/gem/component"
+	"github.com/tomas-mraz/input"
 	vk "github.com/tomas-mraz/vulkan"
 	ash "github.com/tomas-mraz/vulkan-ash"
 )
@@ -25,17 +27,18 @@ type Config struct {
 }
 
 type pushConstants struct {
-	OffsetX, OffsetY   float32
-	Angle, Aspect      float32
+	OffsetX, OffsetY       float32
+	Angle, Aspect          float32
 	ColorR, ColorG, ColorB float32
-	Brightness         float32
+	Brightness             float32
 }
 
 var pushConstSize = uint32(unsafe.Sizeof(pushConstants{}))
 
 type Engine struct {
-	Config    Config
-	Window    *glfw.Window
+	Config Config
+	Input  *input.Input
+	Window *glfw.Window
 
 	vo        ash.Vulkan
 	swapchain ash.VulkanSwapchainInfo
@@ -49,7 +52,7 @@ type Engine struct {
 	dt       float64
 	lastTime time.Time
 
-	cmd     vk.CommandBuffer
+	cmd      vk.CommandBuffer
 	frameIdx uint32
 	inFrame  bool
 }
@@ -141,8 +144,12 @@ func New(cfg Config) *Engine {
 		panic(err)
 	}
 
+	in := input.New()
+	hookInput(window, in)
+
 	return &Engine{
 		Config:    cfg,
+		Input:     in,
 		Window:    window,
 		vo:        vo,
 		swapchain: swapchain,
@@ -155,20 +162,29 @@ func New(cfg Config) *Engine {
 	}
 }
 
-// Run starts the game loop. The provided function is called every frame.
-func (e *Engine) Run(frame func(e *Engine)) {
+// Run starts the game loop with the given scene.
+// The loop ends when the window is closed or Scene.Update returns true.
+// Call Scene.Init before the first Run if the scene needs initialization.
+func (e *Engine) Run(scene Scene) {
+	e.elapsed = 0
+	e.lastTime = time.Now()
 	for !e.Window.ShouldClose() {
-		glfw.PollEvents()
-
 		now := time.Now()
 		e.dt = now.Sub(e.lastTime).Seconds()
 		e.elapsed += e.dt
 		e.lastTime = now
 
+		e.Input.Tick(e.elapsed)
+		glfw.PollEvents()
+
+		if scene.Update(e) {
+			break
+		}
+
 		if !e.beginFrame() {
 			continue
 		}
-		frame(e)
+		scene.Draw(e)
 		e.endFrame()
 	}
 }
@@ -231,18 +247,18 @@ func (e *Engine) endFrame() {
 }
 
 // DrawTriangle draws a colored triangle at position (x, y) with rotation angle (radians).
-func (e *Engine) DrawTriangle(x, y, angle, r, g, b float32) {
+func (e *Engine) DrawTriangle(position component.Position, angle component.Angle, color component.Color) {
 	if !e.inFrame {
 		return
 	}
 	pc := pushConstants{
-		OffsetX:    x,
-		OffsetY:    y,
-		Angle:      angle,
+		OffsetX:    position.X,
+		OffsetY:    position.Y,
+		Angle:      float32(angle),
 		Aspect:     float32(e.Config.Height) / float32(e.Config.Width),
-		ColorR:     r,
-		ColorG:     g,
-		ColorB:     b,
+		ColorR:     color.ColorR,
+		ColorG:     color.ColorG,
+		ColorB:     color.ColorB,
 		Brightness: 1.0,
 	}
 	flags := vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit)
