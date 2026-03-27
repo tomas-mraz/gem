@@ -7,7 +7,6 @@ import (
 type Archetype struct {
 	Entity   []component.EntityID // stejný index = stejná entita
 	Position []component.Position // hustě zabalené slicy
-	Velocity []component.Velocity
 }
 
 type ArchetypeHolder struct {
@@ -20,6 +19,5 @@ func NewArchetype() Archetype {
 	return Archetype{
 		Entity:   make([]component.EntityID, 0),
 		Position: make([]component.Position, 0),
-		Velocity: make([]component.Velocity, 0),
 	}
 }

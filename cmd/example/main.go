@@ -1,47 +1,8 @@
 package main
 
 import (
-	"math"
-
 	"github.com/tomas-mraz/gem"
-	"github.com/tomas-mraz/gem/component"
 )
-
-// exampleScene renders 7 colored triangles orbiting in a circle.
-type exampleScene struct {
-	cameraPosition component.Position
-	triangles      ArchetypeTriangle
-}
-
-func (s *exampleScene) Init(e *gem.Engine) {
-	s.cameraPosition = component.Position{X: 0, Y: 0, Z: 0}
-	s.triangles = NewArchetypeTriangle()
-}
-
-func (s *exampleScene) Update(e *gem.Engine) bool {
-	return true
-}
-
-func (s *exampleScene) Draw(e *gem.Engine) {
-	t := float32(e.Elapsed())
-
-	for i := 0; i < 7; i++ {
-		a := float32(i) * 2 * math.Pi / 7
-		radius := float32(0.5)
-		x := radius * float32(math.Cos(float64(a+t*0.5)))
-		y := radius * float32(math.Sin(float64(a+t*0.5)))
-
-		r := float32(math.Sin(float64(a))*0.5 + 0.5)
-		g := float32(math.Sin(float64(a+2*math.Pi/3))*0.5 + 0.5)
-		b := float32(math.Sin(float64(a+4*math.Pi/3))*0.5 + 0.5)
-
-		e.DrawTriangle(
-			component.Position{X: x, Y: y},
-			component.Angle(t*2+a),
-			component.Color{ColorR: r, ColorG: g, ColorB: b, Brightness: 1},
-		)
-	}
-}
 
 func main() {
 	e := gem.New(gem.Config{
@@ -54,7 +15,7 @@ func main() {
 		panic(err)
 	}
 
-	s := &exampleScene{}
+	s := gem.NewScene[exampleScene](gem.SceneTypeRasterization)
 	s.Init(e)
 	e.Run(s)
 }
