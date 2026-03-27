@@ -2,34 +2,28 @@
 
 Go game engine built on Vulkan via [vulkan-ash](https://github.com/tomas-mraz/vulkan-ash).
 
+The standard game loop is intentionally sequential: Inputs → Update data → Draw → Present → repeat
 
-Standardní game loop je záměrně sekvenční:
-Update → Draw → Present → repeat.
-
-Entity-Component-System
+Engine using ECP (Entity-Component-System) for storing data about objects.
+Using interfaces to access objects with a defined pattern of components.
+Archetypes are static on the application side.
 
 Tři části
-- Entity — jen unikátní ID (číslo). Žádná data, žádná logika. Jen identifikátor.
-- Component — čistá data bez logiky. Např. Position{X, Y}, Velocity{DX, DY}, Sprite{TextureID}, Health{HP}.
-- System — čistá logika bez dat. Operuje nad entitami, které mají určitou kombinaci komponent. Např. MovementSystem zpracuje všechny      
-  entity, které mají Position + Velocity.
-
-
-Interface-driven
-Scene Graph
+- Entity — Identification like index into an array.
+- Component — pure data without business logic. For example, Position{X, Y}, Velocity{DX, DY}, Sprite{TextureID}, Health{HP}.
+- System — pure business logic without data. Operate on entities which a particular set of component (accessing by interface).
+For example, `MovementSystem` process all entities with component `Position` and `Velocity`.
+  
+Another types of data architecture are: Interface-driven, Scene Graph
 
 # Architecture
-
 
 ## Data Organization
 
 Archetypy — jak to dělají moderní ECS (arche, Bevy, Unity DOTS)
 
-Klíčová myšlenka: entity se seskupí podle kombinace komponent, kterou nesou. Každá unikátní kombinace = jeden archetyp.
-
 // Archetyp = skupina entit se stejnou sadou komponent
 type Archetype struct {                                                                                                                   
-mask       uint64          // jaké komponenty tento archetyp má                                                                       
 positions  []Position      // hustě zabalené slicy                                                                                    
 velocities []Velocity      // stejný index = stejná entita                                                                            
 healths    []Health                                                                                                                   
@@ -56,18 +50,18 @@ for _, arch := range w.archetypes {
 if arch.mask & required == required {                                                                                             
 result = append(result, arch)
 }                                                                                                                                 
-}           
+}
 return result
 }
 
-// MovementSystem                                                                                                                         
+// MovementSystem
 for _, arch := range world.Query(CPosition | CVelocity) {
-// ŽÁDNÉ if/ok kontroly — všechny entity v archetypu                                                                                  
-// mají zaručeně obě komponenty                                                                                                       
-for i := range arch.entities {                                                                                                        
-arch.positions[i].X += arch.velocities[i].DX                                                                                      
-arch.positions[i].Y += arch.velocities[i].DY                                                                                      
-}           
+// ŽÁDNÉ if/ok kontroly — všechny entity v archetypu
+// mají zaručeně obě komponenty
+for i := range arch.entities {
+arch.positions[i].X += arch.velocities[i].DX
+arch.positions[i].Y += arch.velocities[i].DY
+}
 }
 
 Proč je to rychlé: vnitřní smyčka iteruje přes souvislé slicy bez jakéhokoliv větvení. CPU prefetcher si s tím poradí, cache line se plně
@@ -96,8 +90,7 @@ Hierarchy:
 ### Scene
 
 It is top-level object který určuje způsob vykreslovací pipeline [rasterization / raytracing].
-Pod objekt scene jde přiřadit další objekty (3D primitiva (krychle, koule, jehlan, ...), model, světlo, aktivitu ...)
-Nastavení kamery.
+Scéna obsahuje nastavení kamery.
 
 ### Node
 
@@ -155,10 +148,6 @@ Attributes:
 
 Představuje událost / akci
 
-### Process game loop
-- process "action" on each "node"
-- process inputs 
-- process events
 
 
 ### Example #1:
@@ -180,16 +169,6 @@ Představuje událost / akci
      - registered `loop activity` for `ramp-down-red`
      - 7 instances
 
-### Example #2
- - scene (rasterization)
-   - activity ??? nebo na nodu
-   - node (type: cube)
-     - registered activity A on event `closer`
-     - registered activity B on event `further`
-   - input
-     - stisk "w" posílá event `closer`
-     - stisk "s" posílá event `further`
-
 ## Structure
 
 ```
@@ -205,28 +184,6 @@ gem/
         └── main.go        # Example — 7 colored triangles orbiting in a circle
 ```
 
-## Usage
-
-```go
-package main
-
-import "github.com/tomas-mraz/gem"
-
-func main() {
-	
-    e := gem.New(gem.Config{
-        Title:  "My Game",
-        Width:  800,
-        Height: 600,
-    })
-    defer e.Destroy()
-
-    e.Run(func(e *gem.Engine) {
-        t := float32(e.Elapsed())
-        e.DrawTriangle(0, 0, t, 0, 1, 0) // spinning green triangle
-    })
-}
-```
 
 ## API
 

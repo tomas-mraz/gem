@@ -21,9 +21,10 @@ var defaultVertShader []byte
 var defaultFragShader []byte
 
 type Config struct {
-	Title  string
-	Width  int
-	Height int
+	Title             string
+	Width             int
+	Height            int
+	RayTracingEnabled bool
 }
 
 type pushConstants struct {
@@ -87,13 +88,19 @@ func New(cfg Config) *Engine {
 	}
 
 	extensions := window.GetRequiredInstanceExtensions()
-	vo, err := ash.NewDevice(cfg.Title, extensions, func(inst vk.Instance, _ uintptr) (vk.Surface, error) {
+	surfaceFunc := func(inst vk.Instance, _ uintptr) (vk.Surface, error) {
 		ptr, e := window.CreateWindowSurface(inst, nil)
 		if e != nil {
 			return vk.NullSurface, e
 		}
 		return vk.SurfaceFromPointer(ptr), nil
-	}, 0)
+	}
+	var vo ash.Vulkan
+	if cfg.RayTracingEnabled {
+		vo, err = ash.NewDeviceWithOptions(cfg.Title, extensions, surfaceFunc, 0, rtDeviceOptions())
+	} else {
+		vo, err = ash.NewDevice(cfg.Title, extensions, surfaceFunc, 0)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -181,11 +188,17 @@ func (e *Engine) Run(scene Scene) {
 			break
 		}
 
-		if !e.beginFrame() {
-			continue
+		if cd, ok := scene.(CustomDrawer); ok {
+			if !cd.DrawCustom(e) {
+				break
+			}
+		} else {
+			if !e.beginFrame() {
+				continue
+			}
+			scene.Draw(e)
+			e.endFrame()
 		}
-		scene.Draw(e)
-		e.endFrame()
 	}
 }
 
