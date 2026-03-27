@@ -174,14 +174,14 @@ Představuje událost / akci
 ```
 gem/
 ├── engine.go              # Engine core — window, Vulkan init, game loop, rendering
-├── shaders/
-│   ├── default.vert       # Vertex shader (push constants: position, rotation, aspect)
-│   ├── default.frag       # Fragment shader (push constants: color, brightness)
-│   ├── default.vert.spv   # Compiled SPIR-V (embedded via go:embed)
-│   └── default.frag.spv   # Compiled SPIR-V (embedded via go:embed)
 └── cmd/
     └── example/
-        └── main.go        # Example — 7 colored triangles orbiting in a circle
+        ├── main.go        # Example — 7 colored triangles orbiting in a circle
+        └── shaders/
+            ├── default.vert       # Vertex shader (push constants: position, rotation, aspect)
+            ├── default.frag       # Fragment shader (push constants: color, brightness)
+            ├── default.vert.spv   # Compiled SPIR-V (embedded via go:embed)
+            └── default.frag.spv   # Compiled SPIR-V (embedded via go:embed)
 ```
 
 
