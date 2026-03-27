@@ -15,8 +15,9 @@ type exampleScene struct {
 
 func (s exampleScene) Init(e *gem.Engine) {
 	s.SceneBasic.Init(e)
-	s.triangles = NewArchetypeTriangle()
 
+	// init data
+	s.triangles = NewArchetypeTriangle()
 	s.triangles.Add(component.Position{X: 0, Y: 0}, component.Angle(0), component.Color{ColorR: 1, ColorG: 1, ColorB: 1, Brightness: 1})
 	s.triangles.Add(component.Position{X: 1, Y: 0}, component.Angle(0), component.Color{ColorR: 1, ColorG: 1, ColorB: 1, Brightness: 1})
 }

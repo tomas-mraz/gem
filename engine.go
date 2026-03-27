@@ -17,10 +17,10 @@ import (
 )
 
 type Config struct {
-	Title             string
-	Width             int
-	Height            int
-	RayTracingEnabled bool
+	Title      string
+	Width      int
+	Height     int
+	RayTracing bool
 }
 
 type pushConstants struct {
@@ -95,7 +95,7 @@ func New(cfg Config) *Engine {
 		return vk.SurfaceFromPointer(ptr), nil
 	}
 	var vo ash.Vulkan
-	if cfg.RayTracingEnabled {
+	if cfg.RayTracing {
 		vo, err = ash.NewDeviceWithOptions(cfg.Title, extensions, surfaceFunc, 0, rtDeviceOptions())
 	} else {
 		vo, err = ash.NewDevice(cfg.Title, extensions, surfaceFunc, 0)
