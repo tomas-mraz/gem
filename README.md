@@ -191,7 +191,7 @@ gem/
 | Method                                  | Description                                           |
 |-----------------------------------------|-------------------------------------------------------|
 | `gem.New(cfg)`                          | Create engine, open window, initialize Vulkan         |
-| `e.SetShaders(vertSPV, fragSPV)`        | Create the default graphics pipeline from SPIR-V data |
+| `scene.SetShaders(e, vertSPV, fragSPV)` | Create the raster pipeline owned by that scene        |
 | `e.Run(scene)`                          | Start game loop for the provided scene                |
 | `e.DrawTriangle(position, angle, color)`| Draw a colored triangle at position with rotation     |
 | `e.Elapsed()`                           | Total time since start (seconds)                      |

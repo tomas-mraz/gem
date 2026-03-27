@@ -40,8 +40,6 @@ type Engine struct {
 	vo        ash.Vulkan
 	swapchain ash.VulkanSwapchainInfo
 	renderer  ash.VulkanRenderInfo
-	buffer    ash.VulkanBufferInfo
-	gfx       ash.VulkanGfxPipelineInfo
 	fence     vk.Fence
 	semaphore vk.Semaphore
 
@@ -53,8 +51,10 @@ type Engine struct {
 	frameIdx uint32
 	inFrame  bool
 
-	vertShaderData map[string][]byte
-	fragShaderData map[string][]byte
+	vertShaderData map[string]*[]byte
+	fragShaderData map[string]*[]byte
+
+	activeRaster *rasterState
 }
 
 func New(cfg Config) *Engine {
@@ -121,17 +121,6 @@ func New(cfg Config) *Engine {
 		panic(err)
 	}
 
-	sz := float32(0.1)
-	vertices := []float32{
-		0, -sz, 0,
-		sz * float32(math.Sin(2*math.Pi/3)), -sz * float32(math.Cos(2*math.Pi/3)), 0,
-		sz * float32(math.Sin(4*math.Pi/3)), -sz * float32(math.Cos(4*math.Pi/3)), 0,
-	}
-	buffer, err := ash.NewBufferWithData(vo.Device, vo.GpuDevice, vertices)
-	if err != nil {
-		panic(err)
-	}
-
 	fence, semaphore, err := ash.NewSyncObjects(vo.Device)
 	if err != nil {
 		panic(err)
@@ -147,22 +136,23 @@ func New(cfg Config) *Engine {
 		vo:             vo,
 		swapchain:      swapchain,
 		renderer:       renderer,
-		buffer:         buffer,
 		fence:          fence,
 		semaphore:      semaphore,
 		lastTime:       time.Now(),
-		vertShaderData: make(map[string][]byte),
-		fragShaderData: make(map[string][]byte),
+		vertShaderData: make(map[string]*[]byte),
+		fragShaderData: make(map[string]*[]byte),
 	}
 }
 
-// SetShaders creates or replaces the default graphics pipeline shaders.
-func (e *Engine) SetShaders(vertShaderData, fragShaderData []byte) error {
+func (e *Engine) setRasterShaders(rs *rasterState, vertShaderData, fragShaderData []byte) error {
 	if len(vertShaderData) == 0 {
 		return fmt.Errorf("gem: vertex shader data is empty")
 	}
 	if len(fragShaderData) == 0 {
 		return fmt.Errorf("gem: fragment shader data is empty")
+	}
+	if err := e.ensureRasterBuffer(rs); err != nil {
+		return err
 	}
 
 	gfx, err := ash.NewGraphicsPipelineWithOptions(e.vo.Device, e.swapchain.DisplaySize, e.renderer.RenderPass, ash.PipelineOptions{
@@ -178,25 +168,59 @@ func (e *Engine) SetShaders(vertShaderData, fragShaderData []byte) error {
 		return err
 	}
 
-	if e.hasGraphicsPipeline() {
-		e.gfx.Destroy()
+	if rs.gfx.GetPipeline() != vk.NullPipeline {
+		rs.gfx.Destroy()
 	}
-	e.gfx = gfx
+	rs.gfx = gfx
 	return nil
 }
 
 func (e *Engine) LoadShaders(vertShaderPath, fragShaderPath string) error {
-	var err error
-	e.vertShaderData[filepath.Base(vertShaderPath)], err = os.ReadFile(vertShaderPath)
+	aaa, err := os.ReadFile(vertShaderPath)
 	if err != nil {
 		return fmt.Errorf("gem: read vertex shader %q: %w", vertShaderPath, err)
 	}
+	e.vertShaderData[filepath.Base(vertShaderPath)] = &aaa
 
-	e.fragShaderData[filepath.Base(fragShaderPath)], err = os.ReadFile(fragShaderPath)
-	if err != nil {
-		return fmt.Errorf("gem: read fragment shader %q: %w", fragShaderPath, err)
+	bbb, err2 := os.ReadFile(fragShaderPath)
+	if err2 != nil {
+		return fmt.Errorf("gem: read fragment shader %q: %w", fragShaderPath, err2)
+	}
+	e.fragShaderData[filepath.Base(fragShaderPath)] = &bbb
+
+	return nil
+}
+
+func (e *Engine) GetVertexShader(name string) *[]byte {
+	if ptr, ok := e.vertShaderData[name]; ok {
+		return ptr
+	}
+	return nil
+}
+
+func (e *Engine) GetFragmentShader(name string) *[]byte {
+	if ptr, ok := e.fragShaderData[name]; ok {
+		return ptr
+	}
+	return nil
+}
+
+func (e *Engine) ensureRasterBuffer(rs *rasterState) error {
+	if rs.buffer.GetDeviceMemory() != vk.NullDeviceMemory {
+		return nil
 	}
 
+	sz := float32(0.1)
+	vertices := []float32{
+		0, -sz, 0,
+		sz * float32(math.Sin(2*math.Pi/3)), -sz * float32(math.Cos(2*math.Pi/3)), 0,
+		sz * float32(math.Sin(4*math.Pi/3)), -sz * float32(math.Cos(4*math.Pi/3)), 0,
+	}
+	buffer, err := ash.NewBufferWithData(e.vo.Device, e.vo.GpuDevice, vertices)
+	if err != nil {
+		return err
+	}
+	rs.buffer = buffer
 	return nil
 }
 
@@ -204,8 +228,15 @@ func (e *Engine) LoadShaders(vertShaderPath, fragShaderPath string) error {
 // The loop ends when the window is closed or Scene.Update returns true.
 // Call Scene.Init before the first Run if the scene needs initialization.
 func (e *Engine) Run(scene Scene) {
-	if _, ok := scene.(CustomDrawer); !ok && !e.hasGraphicsPipeline() {
-		panic("gem: shaders not set; call Engine.SetShaders before Run")
+	if _, ok := scene.(CustomDrawer); !ok {
+		rs, ok := scene.(rasterScene)
+		if !ok || rs.rasterState() == nil {
+			panic("gem: raster scene must embed SceneBasic")
+		}
+		if rs.rasterState().gfx.GetPipeline() == vk.NullPipeline {
+			panic("gem: scene shaders not set; call scene.LoadShaders or scene.SetShaders before Run")
+		}
+		e.activeRaster = rs.rasterState()
 	}
 
 	e.elapsed = 0
@@ -237,10 +268,6 @@ func (e *Engine) Run(scene Scene) {
 	}
 }
 
-func (e *Engine) hasGraphicsPipeline() bool {
-	return e.gfx.GetPipeline() != vk.NullPipeline
-}
-
 func (e *Engine) beginFrame() bool {
 	var nextIdx uint32
 	ret := vk.AcquireNextImage(e.vo.Device, e.swapchain.DefaultSwapchain(), vk.MaxUint64, e.semaphore, vk.NullFence, &nextIdx)
@@ -263,8 +290,8 @@ func (e *Engine) beginFrame() bool {
 		PClearValues:    clearValues,
 	}, vk.SubpassContentsInline)
 
-	vk.CmdBindPipeline(e.cmd, vk.PipelineBindPointGraphics, e.gfx.GetPipeline())
-	vk.CmdBindVertexBuffers(e.cmd, 0, 1, []vk.Buffer{e.buffer.DefaultVertexBuffer()}, []vk.DeviceSize{0})
+	vk.CmdBindPipeline(e.cmd, vk.PipelineBindPointGraphics, e.activeRaster.gfx.GetPipeline())
+	vk.CmdBindVertexBuffers(e.cmd, 0, 1, []vk.Buffer{e.activeRaster.buffer.DefaultVertexBuffer()}, []vk.DeviceSize{0})
 
 	e.inFrame = true
 	return true
@@ -300,7 +327,7 @@ func (e *Engine) endFrame() {
 
 // DrawTriangle draws a colored triangle at position (x, y) with rotation angle (radians).
 func (e *Engine) DrawTriangle(position component.Position, angle component.Angle, color component.Color) {
-	if !e.inFrame {
+	if !e.inFrame || e.activeRaster == nil {
 		return
 	}
 	pc := pushConstants{
@@ -314,7 +341,7 @@ func (e *Engine) DrawTriangle(position component.Position, angle component.Angle
 		Brightness: 1.0,
 	}
 	flags := vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit)
-	vk.CmdPushConstants(e.cmd, e.gfx.GetLayout(), flags, 0, pushConstSize, unsafe.Pointer(&pc))
+	vk.CmdPushConstants(e.cmd, e.activeRaster.gfx.GetLayout(), flags, 0, pushConstSize, unsafe.Pointer(&pc))
 	vk.CmdDraw(e.cmd, 3, 1, 0, 0)
 }
 
@@ -329,9 +356,7 @@ func (e *Engine) Destroy() {
 	vk.DeviceWaitIdle(e.vo.Device)
 	vk.DestroySemaphore(e.vo.Device, e.semaphore, nil)
 	vk.DestroyFence(e.vo.Device, e.fence, nil)
-	e.gfx.Destroy()
-	vk.FreeMemory(e.vo.Device, e.buffer.GetDeviceMemory(), nil)
-	e.buffer.Destroy()
+	e.destroyRaster(e.activeRaster)
 	vk.FreeCommandBuffers(e.vo.Device, e.renderer.GetCmdPool(), uint32(len(e.renderer.GetCmdBuffers())), e.renderer.GetCmdBuffers())
 	vk.DestroyCommandPool(e.vo.Device, e.renderer.GetCmdPool(), nil)
 	vk.DestroyRenderPass(e.vo.Device, e.renderer.RenderPass, nil)
@@ -344,4 +369,28 @@ func (e *Engine) Destroy() {
 	vk.DestroyInstance(e.vo.Instance, nil)
 	e.Window.Destroy()
 	glfw.Terminate()
+}
+
+func (e *Engine) destroyRaster(rs *rasterState) {
+	if rs == nil {
+		return
+	}
+	if rs.gfx.GetPipeline() != vk.NullPipeline {
+		rs.gfx.Destroy()
+		rs.gfx = ash.VulkanGfxPipelineInfo{}
+	}
+	if rs.buffer.GetDeviceMemory() != vk.NullDeviceMemory {
+		vk.FreeMemory(e.vo.Device, rs.buffer.GetDeviceMemory(), nil)
+	}
+	rs.buffer.Destroy()
+	rs.buffer = ash.VulkanBufferInfo{}
+	if e.activeRaster == rs {
+		e.activeRaster = nil
+	}
+}
+
+// CleanShadersBank clear map with pointers to shader data
+func (e *Engine) CleanShadersBank() {
+	clear(e.vertShaderData)
+	clear(e.fragShaderData)
 }

@@ -11,10 +11,16 @@ import (
 type exampleScene struct {
 	gem.SceneBasic
 	triangles ArchetypeTriangle
+
+	vertexShader   *[]byte
+	fragmentShader *[]byte
 }
 
 func (s exampleScene) Init(e *gem.Engine) {
 	s.SceneBasic.Init(e)
+
+	s.vertexShader = e.GetVertexShader(vertexShader1)
+	s.fragmentShader = e.GetFragmentShader(fragmentShader1)
 
 	// init data
 	s.triangles = NewArchetypeTriangle()
