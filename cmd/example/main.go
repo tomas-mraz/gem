@@ -8,10 +8,19 @@ import (
 )
 
 // exampleScene renders 7 colored triangles orbiting in a circle.
-type exampleScene struct{}
+type exampleScene struct {
+	cameraPosition component.Position
+	triangles      ArchetypeTriangle
+}
 
-func (s *exampleScene) Init(e *gem.Engine)        {}
-func (s *exampleScene) Update(e *gem.Engine) bool { return false }
+func (s *exampleScene) Init(e *gem.Engine) {
+	s.cameraPosition = component.Position{X: 0, Y: 0, Z: 0}
+	s.triangles = NewArchetypeTriangle()
+}
+
+func (s *exampleScene) Update(e *gem.Engine) bool {
+	return true
+}
 
 func (s *exampleScene) Draw(e *gem.Engine) {
 	t := float32(e.Elapsed())
