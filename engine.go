@@ -3,6 +3,8 @@ package gem
 import (
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 	"unsafe"
@@ -50,6 +52,9 @@ type Engine struct {
 	cmd      vk.CommandBuffer
 	frameIdx uint32
 	inFrame  bool
+
+	vertShaderData map[string][]byte
+	fragShaderData map[string][]byte
 }
 
 func New(cfg Config) *Engine {
@@ -136,16 +141,18 @@ func New(cfg Config) *Engine {
 	hookInput(window, in)
 
 	return &Engine{
-		Config:    cfg,
-		Input:     in,
-		Window:    window,
-		vo:        vo,
-		swapchain: swapchain,
-		renderer:  renderer,
-		buffer:    buffer,
-		fence:     fence,
-		semaphore: semaphore,
-		lastTime:  time.Now(),
+		Config:         cfg,
+		Input:          in,
+		Window:         window,
+		vo:             vo,
+		swapchain:      swapchain,
+		renderer:       renderer,
+		buffer:         buffer,
+		fence:          fence,
+		semaphore:      semaphore,
+		lastTime:       time.Now(),
+		vertShaderData: make(map[string][]byte),
+		fragShaderData: make(map[string][]byte),
 	}
 }
 
@@ -175,6 +182,21 @@ func (e *Engine) SetShaders(vertShaderData, fragShaderData []byte) error {
 		e.gfx.Destroy()
 	}
 	e.gfx = gfx
+	return nil
+}
+
+func (e *Engine) LoadShaders(vertShaderPath, fragShaderPath string) error {
+	var err error
+	e.vertShaderData[filepath.Base(vertShaderPath)], err = os.ReadFile(vertShaderPath)
+	if err != nil {
+		return fmt.Errorf("gem: read vertex shader %q: %w", vertShaderPath, err)
+	}
+
+	e.fragShaderData[filepath.Base(fragShaderPath)], err = os.ReadFile(fragShaderPath)
+	if err != nil {
+		return fmt.Errorf("gem: read fragment shader %q: %w", fragShaderPath, err)
+	}
+
 	return nil
 }
 

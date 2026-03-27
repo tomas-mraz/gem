@@ -1,7 +1,15 @@
 package main
 
 import (
+	"path/filepath"
+
 	"github.com/tomas-mraz/gem"
+)
+
+const (
+	dataDir = "shaders"
+	aaa     = "default.frag.spv"
+	bbb     = "default.vert.spv"
 )
 
 func main() {
@@ -11,7 +19,9 @@ func main() {
 		Height: 600,
 	})
 	defer e.Destroy()
-	if err := e.SetShaders(defaultVertShader, defaultFragShader); err != nil {
+
+	err := e.LoadShaders(filepath.Join(dataDir, aaa), filepath.Join(dataDir, bbb))
+	if err != nil {
 		panic(err)
 	}
 
