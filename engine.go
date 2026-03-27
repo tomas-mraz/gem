@@ -66,7 +66,7 @@ func New(cfg Config) *Engine {
 	runtime.LockOSThread()
 
 	if err := glfw.Init(); err != nil {
-		panic(err)
+		panic(fmt.Errorf("gem: glfw.Init failed: %w", err))
 	}
 
 	vk.SetGetInstanceProcAddr(glfw.GetVulkanGetInstanceProcAddress())
@@ -78,7 +78,7 @@ func New(cfg Config) *Engine {
 	glfw.WindowHint(glfw.Resizable, glfw.False)
 	window, err := glfw.CreateWindow(cfg.Width, cfg.Height, cfg.Title, nil, nil)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("gem: glfw.CreateWindow failed: %w", err))
 	}
 
 	extensions := window.GetRequiredInstanceExtensions()
