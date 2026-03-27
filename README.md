@@ -177,6 +177,7 @@ gem/
 └── cmd/
     └── example/
         ├── main.go        # Example — 7 colored triangles orbiting in a circle
+        ├── shaders.go     # Embeds SPIR-V shaders and passes them into gem.Engine
         └── shaders/
             ├── default.vert       # Vertex shader (push constants: position, rotation, aspect)
             ├── default.frag       # Fragment shader (push constants: color, brightness)
@@ -190,8 +191,9 @@ gem/
 | Method                                  | Description                                           |
 |-----------------------------------------|-------------------------------------------------------|
 | `gem.New(cfg)`                          | Create engine, open window, initialize Vulkan         |
-| `e.Run(func)`                           | Start game loop, calls provided function every frame  |
-| `e.DrawTriangle(x, y, angle, r, g, b)`  | Draw a colored triangle at position with rotation     |
+| `e.SetShaders(vertSPV, fragSPV)`        | Create the default graphics pipeline from SPIR-V data |
+| `e.Run(scene)`                          | Start game loop for the provided scene                |
+| `e.DrawTriangle(position, angle, color)`| Draw a colored triangle at position with rotation     |
 | `e.Elapsed()`                           | Total time since start (seconds)                      |
 | `e.DeltaTime()`                         | Last frame duration (seconds)                         |
 | `e.Destroy()`                           | Release all resources                                 |

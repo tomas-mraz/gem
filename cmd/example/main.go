@@ -4,12 +4,13 @@ import (
 	"math"
 
 	"github.com/tomas-mraz/gem"
+	"github.com/tomas-mraz/gem/component"
 )
 
 // exampleScene renders 7 colored triangles orbiting in a circle.
 type exampleScene struct{}
 
-func (s *exampleScene) Init(e *gem.Engine)   {}
+func (s *exampleScene) Init(e *gem.Engine)        {}
 func (s *exampleScene) Update(e *gem.Engine) bool { return false }
 
 func (s *exampleScene) Draw(e *gem.Engine) {
@@ -25,7 +26,11 @@ func (s *exampleScene) Draw(e *gem.Engine) {
 		g := float32(math.Sin(float64(a+2*math.Pi/3))*0.5 + 0.5)
 		b := float32(math.Sin(float64(a+4*math.Pi/3))*0.5 + 0.5)
 
-		e.DrawTriangle(x, y, t*2+a, r, g, b)
+		e.DrawTriangle(
+			component.Position{X: x, Y: y},
+			component.Angle(t*2+a),
+			component.Color{ColorR: r, ColorG: g, ColorB: b, Brightness: 1},
+		)
 	}
 }
 
@@ -36,6 +41,9 @@ func main() {
 		Height: 600,
 	})
 	defer e.Destroy()
+	if err := e.SetShaders(defaultVertShader, defaultFragShader); err != nil {
+		panic(err)
+	}
 
 	s := &exampleScene{}
 	s.Init(e)

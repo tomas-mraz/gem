@@ -1,7 +1,7 @@
 package gem
 
 import (
-	_ "embed"
+	"fmt"
 	"math"
 	"runtime"
 	"time"
@@ -13,12 +13,6 @@ import (
 	vk "github.com/tomas-mraz/vulkan"
 	ash "github.com/tomas-mraz/vulkan-ash"
 )
-
-//go:embed shaders/default.vert.spv
-var defaultVertShader []byte
-
-//go:embed shaders/default.frag.spv
-var defaultFragShader []byte
 
 type Config struct {
 	Title             string
@@ -133,19 +127,6 @@ func New(cfg Config) *Engine {
 		panic(err)
 	}
 
-	gfx, err := ash.NewGraphicsPipelineWithOptions(vo.Device, swapchain.DisplaySize, renderer.RenderPass, ash.PipelineOptions{
-		VertShaderData: defaultVertShader,
-		FragShaderData: defaultFragShader,
-		PushConstantRanges: []vk.PushConstantRange{{
-			StageFlags: vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit),
-			Offset:     0,
-			Size:       pushConstSize,
-		}},
-	})
-	if err != nil {
-		panic(err)
-	}
-
 	fence, semaphore, err := ash.NewSyncObjects(vo.Device)
 	if err != nil {
 		panic(err)
@@ -162,17 +143,49 @@ func New(cfg Config) *Engine {
 		swapchain: swapchain,
 		renderer:  renderer,
 		buffer:    buffer,
-		gfx:       gfx,
 		fence:     fence,
 		semaphore: semaphore,
 		lastTime:  time.Now(),
 	}
 }
 
+// SetShaders creates or replaces the default graphics pipeline shaders.
+func (e *Engine) SetShaders(vertShaderData, fragShaderData []byte) error {
+	if len(vertShaderData) == 0 {
+		return fmt.Errorf("gem: vertex shader data is empty")
+	}
+	if len(fragShaderData) == 0 {
+		return fmt.Errorf("gem: fragment shader data is empty")
+	}
+
+	gfx, err := ash.NewGraphicsPipelineWithOptions(e.vo.Device, e.swapchain.DisplaySize, e.renderer.RenderPass, ash.PipelineOptions{
+		VertShaderData: vertShaderData,
+		FragShaderData: fragShaderData,
+		PushConstantRanges: []vk.PushConstantRange{{
+			StageFlags: vk.ShaderStageFlags(vk.ShaderStageVertexBit | vk.ShaderStageFragmentBit),
+			Offset:     0,
+			Size:       pushConstSize,
+		}},
+	})
+	if err != nil {
+		return err
+	}
+
+	if e.hasGraphicsPipeline() {
+		e.gfx.Destroy()
+	}
+	e.gfx = gfx
+	return nil
+}
+
 // Run starts the game loop with the given scene.
 // The loop ends when the window is closed or Scene.Update returns true.
 // Call Scene.Init before the first Run if the scene needs initialization.
 func (e *Engine) Run(scene Scene) {
+	if _, ok := scene.(CustomDrawer); !ok && !e.hasGraphicsPipeline() {
+		panic("gem: shaders not set; call Engine.SetShaders before Run")
+	}
+
 	e.elapsed = 0
 	e.lastTime = time.Now()
 	for !e.Window.ShouldClose() {
@@ -200,6 +213,10 @@ func (e *Engine) Run(scene Scene) {
 			e.endFrame()
 		}
 	}
+}
+
+func (e *Engine) hasGraphicsPipeline() bool {
+	return e.gfx.GetPipeline() != vk.NullPipeline
 }
 
 func (e *Engine) beginFrame() bool {
