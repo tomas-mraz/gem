@@ -86,7 +86,7 @@ func New(cfg Config) *Engine {
 		panic(fmt.Errorf("gem: glfw.CreateWindow failed: %w", err))
 	}
 
-	extensions := window.GetRequiredInstanceExtensions()
+	requiredExtensions := window.GetRequiredInstanceExtensions()
 	surfaceFunc := func(inst vk.Instance, _ uintptr) (vk.Surface, error) {
 		ptr, e := window.CreateWindowSurface(inst, nil)
 		if e != nil {
@@ -96,9 +96,10 @@ func New(cfg Config) *Engine {
 	}
 	var vo ash.Vulkan
 	if cfg.RayTracing {
-		vo, err = ash.NewDeviceWithOptions(cfg.Title, extensions, surfaceFunc, 0, rtDeviceOptions())
+		requiredExtensions = append(requiredExtensions, ash.RaytracingExtensions()...)
+		vo, err = ash.NewDeviceWithOptions(cfg.Title, requiredExtensions, surfaceFunc, 0, rtDeviceOptions())
 	} else {
-		vo, err = ash.NewDevice(cfg.Title, extensions, surfaceFunc, 0)
+		vo, err = ash.NewDevice(cfg.Title, requiredExtensions, surfaceFunc, 0)
 	}
 	if err != nil {
 		panic(err)
