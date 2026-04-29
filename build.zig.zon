@@ -5,15 +5,14 @@
     .minimum_zig_version = "0.17.0-dev.56+a8226cd53",
     .dependencies = .{
         .vulkan_ash = .{
-            .url = "git+https://github.com/tomas-mraz/vulkan-ash.git#e865423a6da1b985e051c5fbe69815f4fad51059",
-            .hash = "vulkan_ash-0.0.0-iHm2W7EeAgDvRd6ZnhJpntjzlWQyB6oZ5c4d7fZnF2Qj",
+            .url = "git+https://github.com/tomas-mraz/vulkan-ash.git#ac4a0fcf7f0d537ec0618cab5fd6e817ace6c31b",
+            .hash = "vulkan_ash-0.0.0-iHm2W-YsAgB8i9tnsjzCTxzZN0V9w2F5CJB6qyykC2Pa",
         },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
-        "examples",
         "README.md",
         "LICENSE",
     },

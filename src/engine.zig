@@ -19,6 +19,8 @@ pub const Config = struct {
     update_hz: u32 = 120,
 };
 
+pub const HostImpl = if (ash.is_android) ash.AndroidHost else ash.DesktopHost;
+
 const max_frame_time_s: f64 = 1.0 / 30.0;
 const dt_spike_log_above_s: f64 = 0.020;
 pub const max_sub_steps: u32 = 5;
@@ -35,7 +37,7 @@ pub const Engine = struct {
     actions: ActionSet,
     resources: ResourceManager,
 
-    host: ash.DesktopHost,
+    host: HostImpl,
     session: ash.Session,
     scene_manager: SceneManager,
 
@@ -46,9 +48,12 @@ pub const Engine = struct {
     accumulator: f64 = 0,
     interp_alpha: f64 = 0,
 
-    last_time: std.time.Instant,
+    last_time: u64,
 
     pub fn init(allocator: Allocator, cfg: Config) !*Engine {
+        if (ash.is_android) {
+            @compileError("On Android use Engine.initAndroid(allocator, cfg, android_app).");
+        }
         var config = cfg;
         if (config.update_hz == 0) config.update_hz = 120;
 
@@ -68,7 +73,52 @@ pub const Engine = struct {
             .session = undefined,
             .scene_manager = undefined,
             .fixed_dt = 1.0 / @as(f64, @floatFromInt(config.update_hz)),
-            .last_time = try std.time.Instant.now(),
+            .last_time = nowNs(),
+        };
+
+        var session_opts: ash.SessionOptions = .{};
+        if (config.ray_tracing) {
+            session_opts.device_options = rayTracingDeviceOptions();
+        }
+        engine.session = ash.Session.init(
+            allocator,
+            engine.host.asHost(),
+            config.title,
+            session_opts,
+        );
+
+        engine.scene_manager = SceneManager.init(allocator, engine);
+        return engine;
+    }
+
+    pub fn initAndroid(
+        allocator: Allocator,
+        cfg: Config,
+        android_app: *ash.native_app_glue.android_app,
+    ) !*Engine {
+        if (!ash.is_android) {
+            @compileError("Engine.initAndroid is only available on Android targets.");
+        }
+        var config = cfg;
+        if (config.update_hz == 0) config.update_hz = 120;
+
+        const engine = try allocator.create(Engine);
+        errdefer allocator.destroy(engine);
+
+        ash.setDebug(false);
+        ash.setValidations(false);
+
+        engine.* = .{
+            .allocator = allocator,
+            .config = config,
+            .input = Input.init(allocator),
+            .actions = ActionSet.init(allocator),
+            .resources = try ResourceManager.init(allocator, config.resource_root),
+            .host = ash.AndroidHost.init(allocator, android_app),
+            .session = undefined,
+            .scene_manager = undefined,
+            .fixed_dt = 1.0 / @as(f64, @floatFromInt(config.update_hz)),
+            .last_time = nowNs(),
         };
 
         var session_opts: ash.SessionOptions = .{};
@@ -102,8 +152,8 @@ pub const Engine = struct {
 
     /// Called by SceneManager once per render frame, before fixed updates.
     pub fn tick(self: *Engine) void {
-        const now = std.time.Instant.now() catch return;
-        const elapsed_ns = now.since(self.last_time);
+        const now = nowNs();
+        const elapsed_ns = now -% self.last_time;
         const raw = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, std.time.ns_per_s);
         self.last_time = now;
 
@@ -139,7 +189,7 @@ pub const Engine = struct {
 
     pub fn resetSceneClock(self: *Engine) void {
         self.scene_elapsed = 0;
-        self.last_time = std.time.Instant.now() catch self.last_time;
+        self.last_time = nowNs();
         self.discardAccumulator();
     }
 
@@ -160,9 +210,15 @@ pub const Engine = struct {
     }
 };
 
+fn nowNs() u64 {
+    var ts: std.os.linux.timespec = undefined;
+    _ = std.os.linux.clock_gettime(.MONOTONIC, &ts);
+    return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+}
+
 fn rayTracingDeviceOptions() ash.DeviceOptions {
     return .{
-        .api_version = ash.vk.API_VERSION_1_2,
+        .api_version = ash.vk.API_VERSION_1_2.toU32(),
     };
 }
 

@@ -127,12 +127,14 @@ pub const SceneManager = struct {
     }
 
     fn ensureRendererOnce(self: *SceneManager, reg: *SceneRegistration, session: *ash.Session) !void {
+        _ = self;
         if (reg.renderer_once_ready) return;
         try reg.renderer.createOnce(session);
         reg.renderer_once_ready = true;
     }
 
     fn ensureRendererSized(self: *SceneManager, reg: *SceneRegistration, session: *ash.Session, extent: ash.vk.Extent2D) !void {
+        _ = self;
         if (reg.renderer_sized_ready) return;
         try reg.renderer.createSized(session, extent);
         reg.renderer_sized_ready = true;
@@ -166,8 +168,12 @@ pub const SceneManager = struct {
             return;
         }
         // Poll GLFW into Input first so the action update sees fresh state.
-        if (self.engine.host.window) |window| {
-            glfw_input.poll(window, &self.engine.input, self.current.?.scene.actions());
+        // Android has no GLFW; touch/key input would be wired through the
+        // AndroidHost event loop instead (not yet implemented for actions).
+        if (!ash.is_android) {
+            if (self.engine.host.window) |window| {
+                glfw_input.poll(window, &self.engine.input, self.current.?.scene.actions());
+            }
         }
         try self.engine.actions.update(&self.engine.input, self.current.?.scene.actions());
     }
@@ -226,7 +232,6 @@ pub const SceneManager = struct {
         if (self.current) |reg| {
             reg.scene.exit(self.engine);
             self.current = null;
-            _ = reg;
         }
         var it = self.scenes.iterator();
         while (it.next()) |entry| self.destroyRenderer(entry.value_ptr.*);

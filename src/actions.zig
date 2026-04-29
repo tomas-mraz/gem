@@ -45,30 +45,30 @@ pub const ActionSet = struct {
         for (bindings.digital) |binding| {
             const gop = try self.states.getOrPut(self.allocator, binding.action);
             if (!gop.found_existing) gop.value_ptr.* = .{};
-            const state = gop.value_ptr;
+            const slot = gop.value_ptr;
 
             if (input.keyDownQ(binding.key)) {
-                state.down = true;
-                if (state.value < 1) state.value = 1;
+                slot.down = true;
+                if (slot.value < 1) slot.value = 1;
             }
-            state.just_pressed = state.just_pressed or input.keyJustPressed(binding.key);
-            state.just_released = state.just_released or input.keyJustReleased(binding.key);
+            slot.just_pressed = slot.just_pressed or input.keyJustPressed(binding.key);
+            slot.just_released = slot.just_released or input.keyJustReleased(binding.key);
         }
 
         for (bindings.axes) |binding| {
             const gop = try self.states.getOrPut(self.allocator, binding.action);
             if (!gop.found_existing) gop.value_ptr.* = .{};
-            const state = gop.value_ptr;
+            const slot = gop.value_ptr;
 
-            var value: f32 = 0;
-            if (input.keyDownQ(binding.negative)) value -= 1;
-            if (input.keyDownQ(binding.positive)) value += 1;
-            state.value = maxAbs(state.value, value);
-            state.down = state.down or value != 0;
-            state.just_pressed = state.just_pressed or
+            var v: f32 = 0;
+            if (input.keyDownQ(binding.negative)) v -= 1;
+            if (input.keyDownQ(binding.positive)) v += 1;
+            slot.value = maxAbs(slot.value, v);
+            slot.down = slot.down or v != 0;
+            slot.just_pressed = slot.just_pressed or
                 input.keyJustPressed(binding.negative) or
                 input.keyJustPressed(binding.positive);
-            state.just_released = state.just_released or
+            slot.just_released = slot.just_released or
                 input.keyJustReleased(binding.negative) or
                 input.keyJustReleased(binding.positive);
         }

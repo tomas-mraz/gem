@@ -6,14 +6,15 @@ pub const Error = error{
     EmptyPath,
     AbsolutePath,
     PathEscapesRoot,
-    NilManager,
-} || std.fs.File.OpenError || std.fs.File.ReadError || std.mem.Allocator.Error || std.json.ParseError(std.json.Scanner);
+};
 
+/// Caches resource data by path. Not thread-safe — load resources from the
+/// engine thread (the Go original used an RwLock; gem-zig uses single-threaded
+/// access, which matches typical engine resource loading).
 pub const ResourceManager = struct {
     allocator: Allocator,
     root: []const u8,
 
-    mutex: std.Thread.RwLock = .{},
     bytes_cache: std.StringHashMapUnmanaged([]u8) = .empty,
     float32_cache: std.StringHashMapUnmanaged([]f32) = .empty,
 
@@ -42,37 +43,44 @@ pub const ResourceManager = struct {
 
     /// Caller owns the returned slice.
     pub fn loadBytes(self: *ResourceManager, path: []const u8) ![]u8 {
-        self.mutex.lockShared();
         if (self.bytes_cache.get(path)) |cached| {
-            self.mutex.unlockShared();
             return self.allocator.dupe(u8, cached);
         }
-        self.mutex.unlockShared();
 
         const full_path = try self.resolve(path);
         defer self.allocator.free(full_path);
 
-        const data = try std.fs.cwd().readFileAlloc(self.allocator, full_path, std.math.maxInt(usize));
+        const data = try readWholeFile(self.allocator, full_path);
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        if (!self.bytes_cache.contains(path)) {
-            const key_copy = try self.allocator.dupe(u8, path);
-            const value_copy = try self.allocator.dupe(u8, data);
-            try self.bytes_cache.put(self.allocator, key_copy, value_copy);
-        }
+        const key_copy = try self.allocator.dupe(u8, path);
+        const value_copy = try self.allocator.dupe(u8, data);
+        try self.bytes_cache.put(self.allocator, key_copy, value_copy);
         return data;
+    }
+
+    fn readWholeFile(allocator: Allocator, path: []const u8) ![]u8 {
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        const fd = try std.posix.openatZ(std.posix.AT.FDCWD, path_z, .{ .ACCMODE = .RDONLY }, 0);
+        defer _ = std.os.linux.close(fd);
+
+        var buf: std.ArrayList(u8) = .empty;
+        errdefer buf.deinit(allocator);
+        var chunk: [4096]u8 = undefined;
+        while (true) {
+            const n = try std.posix.read(fd, &chunk);
+            if (n == 0) break;
+            try buf.appendSlice(allocator, chunk[0..n]);
+        }
+        return try buf.toOwnedSlice(allocator);
     }
 
     /// Caller owns the returned slice. Decodes a JSON array of numbers.
     pub fn loadFloat32Slice(self: *ResourceManager, path: []const u8) ![]f32 {
-        self.mutex.lockShared();
         if (self.float32_cache.get(path)) |cached| {
-            self.mutex.unlockShared();
             return self.allocator.dupe(f32, cached);
         }
-        self.mutex.unlockShared();
 
         const data = try self.loadBytes(path);
         defer self.allocator.free(data);
@@ -81,14 +89,9 @@ pub const ResourceManager = struct {
         defer parsed.deinit();
         const owned = try self.allocator.dupe(f32, parsed.value);
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        if (!self.float32_cache.contains(path)) {
-            const key_copy = try self.allocator.dupe(u8, path);
-            const value_copy = try self.allocator.dupe(f32, owned);
-            try self.float32_cache.put(self.allocator, key_copy, value_copy);
-        }
+        const key_copy = try self.allocator.dupe(u8, path);
+        const value_copy = try self.allocator.dupe(f32, owned);
+        try self.float32_cache.put(self.allocator, key_copy, value_copy);
         return owned;
     }
 
@@ -96,20 +99,9 @@ pub const ResourceManager = struct {
     fn resolve(self: *ResourceManager, path: []const u8) ![]u8 {
         if (path.len == 0) return Error.EmptyPath;
         if (std.fs.path.isAbsolute(path)) return Error.AbsolutePath;
+        if (std.mem.indexOf(u8, path, "..") != null) return Error.PathEscapesRoot;
 
-        const joined = try std.fs.path.join(self.allocator, &.{ self.root, path });
-        errdefer self.allocator.free(joined);
-
-        const root_clean = try self.allocator.dupe(u8, self.root);
-        defer self.allocator.free(root_clean);
-
-        if (std.mem.indexOf(u8, path, "..")) |_| {
-            // Reject any path that contains "..". A stricter check would canonicalize;
-            // for now this matches the Go original's posture against root escapes.
-            self.allocator.free(joined);
-            return Error.PathEscapesRoot;
-        }
-        return joined;
+        return std.fs.path.join(self.allocator, &.{ self.root, path });
     }
 };
 
