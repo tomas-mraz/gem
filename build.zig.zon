@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.17.0-dev.56+a8226cd53",
     .dependencies = .{
         .vulkan_ash = .{
-            .url = "git+https://github.com/tomas-mraz/vulkan-ash.git#ac4a0fcf7f0d537ec0618cab5fd6e817ace6c31b",
-            .hash = "vulkan_ash-0.0.0-iHm2W-YsAgB8i9tnsjzCTxzZN0V9w2F5CJB6qyykC2Pa",
+            .url = "git+https://github.com/tomas-mraz/vulkan-ash.git#fb6b3c5535e435b493ef45f80f11ba88f4776cb8",
+            .hash = "vulkan_ash-0.0.0-iHm2W4UsAgCq0SSx7abnPRS35QB5uAPBMWeMF-QBIsPz",
         },
     },
     .paths = .{

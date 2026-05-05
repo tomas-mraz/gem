@@ -77,6 +77,13 @@ pub const Input = struct {
     /// frame. Per-key down state stays sticky until KeyUp is called.
     pub fn tick(self: *Input, total_elapsed: f64) void {
         self.last_tick_elapsed = total_elapsed;
+        self.clearTransients();
+    }
+
+    /// Clear one-shot flags without advancing the clock. Used by SceneManager
+    /// after a scene transition so a key still held from the previous scene
+    /// does not appear as just-pressed to the new scene in the same frame.
+    pub fn clearTransients(self: *Input) void {
         var it = self.keys.iterator();
         while (it.next()) |entry| {
             entry.value_ptr.just_pressed = false;

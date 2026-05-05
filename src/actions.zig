@@ -40,7 +40,11 @@ pub const ActionSet = struct {
     }
 
     pub fn update(self: *ActionSet, input: *const Input, bindings: ActionMap) !void {
-        self.states.clearRetainingCapacity();
+        var it = self.states.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.value = 0;
+            entry.value_ptr.down = false;
+        }
 
         for (bindings.digital) |binding| {
             const gop = try self.states.getOrPut(self.allocator, binding.action);
@@ -76,6 +80,14 @@ pub const ActionSet = struct {
 
     pub fn clear(self: *ActionSet) void {
         self.states.clearRetainingCapacity();
+    }
+
+    pub fn clearTransients(self: *ActionSet) void {
+        var it = self.states.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.just_pressed = false;
+            entry.value_ptr.just_released = false;
+        }
     }
 
     pub fn state(self: *const ActionSet, action: ActionID) ActionState {
@@ -121,4 +133,31 @@ test "axis binding resolves to negative on its own" {
 
     try std.testing.expectEqual(@as(f32, -1), actions.value("horizontal"));
     try std.testing.expect(actions.down("horizontal"));
+}
+
+test "digital just pressed persists until action transients are cleared" {
+    const allocator = std.testing.allocator;
+    var input = Input.init(allocator);
+    defer input.deinit();
+    var actions = ActionSet.init(allocator);
+    defer actions.deinit();
+
+    const map: ActionMap = .{
+        .digital = &.{
+            .{ .action = "menu", .key = .m },
+        },
+    };
+
+    input.keyDown(.m);
+    try actions.update(&input, map);
+    try std.testing.expect(actions.justPressed("menu"));
+
+    input.tick(0.016);
+    try actions.update(&input, map);
+    try std.testing.expect(actions.justPressed("menu"));
+
+    actions.clearTransients();
+    try actions.update(&input, map);
+    try std.testing.expect(!actions.justPressed("menu"));
+    try std.testing.expect(actions.down("menu"));
 }

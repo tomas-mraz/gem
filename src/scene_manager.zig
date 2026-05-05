@@ -30,6 +30,7 @@ pub const SceneManager = struct {
     scenes: std.StringHashMapUnmanaged(*SceneRegistration) = .empty,
     current: ?*SceneRegistration = null,
     pending_event: ?[]u8 = null,
+    close_requested: bool = false,
     enter_pending: bool = false,
 
     pub fn init(allocator: Allocator, engine: *Engine) SceneManager {
@@ -106,6 +107,14 @@ pub const SceneManager = struct {
         if (event.len == 0) return;
         if (self.pending_event) |existing| self.allocator.free(existing);
         self.pending_event = self.allocator.dupe(u8, event) catch return;
+    }
+
+    pub fn requestClose(self: *SceneManager) void {
+        if (self.pending_event) |existing| {
+            self.allocator.free(existing);
+            self.pending_event = null;
+        }
+        self.close_requested = true;
     }
 
     pub fn run(self: *SceneManager, start_scene_id: []const u8) !void {
@@ -189,7 +198,10 @@ pub const SceneManager = struct {
 
         const ev = self.consumePendingEvent();
         if (ev == null) {
-            self.engine.host.shutdown(); // request close: matches gem-go RequestClose
+            if (self.close_requested) {
+                self.close_requested = false;
+                session.requestClose();
+            }
             return;
         }
         defer self.allocator.free(ev.?);
@@ -209,6 +221,10 @@ pub const SceneManager = struct {
         self.current = next;
         self.enter_pending = true;
         self.engine.actions.clear();
+        // Drop one-shot input flags so a key still held from the previous
+        // scene does not register as just-pressed in the new scene's first
+        // updateActions in this same frame.
+        self.engine.input.clearTransients();
         try self.ensureCurrentEntered();
     }
 
@@ -255,6 +271,7 @@ pub const SceneManager = struct {
                 try self.updateActions();
                 break;
             }
+            self.engine.actions.clearTransients();
             steps += 1;
         }
         if (steps == max_sub_steps) self.engine.discardAccumulator();

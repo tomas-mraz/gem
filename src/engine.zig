@@ -150,6 +150,10 @@ pub const Engine = struct {
         try self.scene_manager.run("__single__");
     }
 
+    pub fn requestClose(self: *Engine) void {
+        self.scene_manager.requestClose();
+    }
+
     /// Called by SceneManager once per render frame, before fixed updates.
     pub fn tick(self: *Engine) void {
         const now = nowNs();
