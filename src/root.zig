@@ -1,7 +1,7 @@
 //! gem — Zig port of the Go game engine at github.com/tomas-mraz/gem.
 //!
 //! Entity-Component-System data with parallel-array archetypes, fixed-step
-//! simulation, scene-event routing, GLFW-polled input, and a Vulkan rendering
+//! simulation, scene-event routing, SDL-polled input, and a Vulkan rendering
 //! pipeline driven through vulkan-ash.
 
 const std = @import("std");
@@ -35,7 +35,7 @@ pub const Engine = @import("engine.zig").Engine;
 pub const Config = @import("engine.zig").Config;
 pub const SceneManager = @import("scene_manager.zig").SceneManager;
 
-pub const glfw_input = @import("glfw_input.zig");
+pub const sdl_input = @import("sdl_input.zig");
 
 test {
     std.testing.refAllDecls(@This());

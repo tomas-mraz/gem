@@ -8,7 +8,7 @@ const Scene = @import("scene.zig").Scene;
 const Renderer = @import("scene.zig").Renderer;
 const ActionMap = @import("actions.zig").ActionMap;
 const max_sub_steps = @import("engine.zig").max_sub_steps;
-const glfw_input = @import("glfw_input.zig");
+const sdl_input = @import("sdl_input.zig");
 
 const SceneRegistration = struct {
     id: []const u8,
@@ -176,12 +176,12 @@ pub const SceneManager = struct {
             self.engine.actions.clear();
             return;
         }
-        // Poll GLFW into Input first so the action update sees fresh state.
-        // Android has no GLFW; touch/key input would be wired through the
+        // Poll SDL into Input first so the action update sees fresh state.
+        // Android has no SDL; touch/key input would be wired through the
         // AndroidHost event loop instead (not yet implemented for actions).
         if (!ash.is_android) {
-            if (self.engine.host.window) |window| {
-                glfw_input.poll(window, &self.engine.input, self.current.?.scene.actions());
+            if (self.engine.host.window != null) {
+                sdl_input.poll(&self.engine.input, self.current.?.scene.actions());
             }
         }
         try self.engine.actions.update(&self.engine.input, self.current.?.scene.actions());
