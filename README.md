@@ -2,7 +2,7 @@
 
 Zig port of the Go game engine at <https://github.com/tomas-mraz/gem>. Built on
 Vulkan via [vulkan-ash](https://github.com/tomas-mraz/vulkan-ash); window and
-input come from [glfw-zig](https://github.com/tomas-mraz/glfw-zig).
+input come from SDL3 (through `ash.DesktopHost` / `ash.sdl`).
 
 The standard game loop is intentionally sequential:
 Inputs → Update data → Draw → Present → repeat.
@@ -23,7 +23,7 @@ gem/
     ├── scene_manager.zig    — Scene registry, event routing, ash.Session driver
     ├── actions.zig          — ActionSet, ActionMap, digital + axis bindings
     ├── input.zig            — Input state (keys, mouse, scroll)
-    ├── glfw_input.zig       — GLFW polling bridge into Input
+    ├── sdl_input.zig        — SDL polling bridge into Input
     ├── component.zig        — Position, Velocity, Color, Angle, EntityID, …
     ├── archetype.zig        — Archetype with parallel component slices
     └── resource_manager.zig — File/JSON resource cache
@@ -41,7 +41,7 @@ zig build test           # run unit tests
 
 | Symbol                     | Description                                       |
 |----------------------------|---------------------------------------------------|
-| `gem.Engine.init(...)`     | Create engine, GLFW host and Vulkan session       |
+| `gem.Engine.init(...)`     | Create engine, SDL host and Vulkan session        |
 | `engine.run(scene)`        | Register one scene and run it                     |
 | `engine.scene_manager`     | Register multiple scenes + event-bound transitions|
 | `engine.deltaTime()`       | Fixed simulation step (seconds)                   |
@@ -54,5 +54,5 @@ zig build test           # run unit tests
   touches resources from background goroutines, so the lock added cost without
   buying anything in practice.
 - Entity IDs are an atomic-counter `u64` instead of UUIDs.
-- Input is polled from GLFW once per fixed update; gem-go used GLFW callbacks,
-  but ash.DesktopHost already owns the window's user pointer.
+- Input is polled from SDL's keyboard/mouse state once per fixed update;
+  gem-go used GLFW callbacks, but ash.DesktopHost owns the SDL event queue.

@@ -2,10 +2,11 @@
     .name = .gem,
     .fingerprint = 0x995086b064010ee1,
     .version = "0.0.0",
-    .minimum_zig_version = "0.17.0-dev.56+a8226cd53",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .vulkan_ash = .{
-            .path = "../vulkan-ash",
+            .url = "git+https://github.com/tomas-mraz/vulkan-ash.git#8986a69789006650779bee17ad173d8c34326f4e",
+            .hash = "vulkan_ash-0.0.0-iHm2WwcsAgD56p0vBtcBvadOTy1GN12McHnww0M_h5hH",
         },
     },
     .paths = .{
