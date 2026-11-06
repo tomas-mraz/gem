@@ -17,6 +17,9 @@ pub const Config = struct {
     ray_tracing: bool = false,
     /// Fixed simulation rate. 0 means use the default (120 Hz).
     update_hz: u32 = 120,
+    /// Swapchain settings, e.g. `.{ .present_mode = .fifo }` for vsync.
+    /// Default (mailbox) keeps the previous behaviour.
+    swapchain_options: ash.SwapchainOptions = .{},
 };
 
 pub const HostImpl = if (ash.is_android) ash.AndroidHost else ash.DesktopHost;
@@ -76,7 +79,7 @@ pub const Engine = struct {
             .last_time = nowNs(),
         };
 
-        var session_opts: ash.SessionOptions = .{};
+        var session_opts: ash.SessionOptions = .{ .swapchain_options = config.swapchain_options };
         if (config.ray_tracing) {
             session_opts.device_options = rayTracingDeviceOptions();
         }
@@ -121,7 +124,7 @@ pub const Engine = struct {
             .last_time = nowNs(),
         };
 
-        var session_opts: ash.SessionOptions = .{};
+        var session_opts: ash.SessionOptions = .{ .swapchain_options = config.swapchain_options };
         if (config.ray_tracing) {
             session_opts.device_options = rayTracingDeviceOptions();
         }
