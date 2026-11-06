@@ -40,6 +40,18 @@ pub const Key = enum(u16) {
     right,
     up,
     down,
+    f1,
+    f2,
+    f3,
+    f4,
+    f5,
+    f6,
+    f7,
+    f8,
+    f9,
+    f10,
+    f11,
+    f12,
     _,
 };
 
